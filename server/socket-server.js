@@ -53,9 +53,12 @@ const startWaitingTimer = (sessionId) => {
   const session = gameSessions.get(sessionId)
   if (!session) return
 
+  console.log(`Starting waiting timer for session ${sessionId}`)
+
   // Clear existing timer if any
   if (session.waitingTimer) {
     clearInterval(session.waitingTimer)
+    session.waitingTimer = null
   }
 
   // Initialize the timer
@@ -63,6 +66,7 @@ const startWaitingTimer = (sessionId) => {
   
   // Immediately send initial time
   io.to(sessionId).emit("waiting_timer", session.timeLeft)
+  console.log(`Initial waiting time sent: ${session.timeLeft}ms`)
 
   // Start new timer
   session.waitingTimer = setInterval(() => {
@@ -74,19 +78,20 @@ const startWaitingTimer = (sessionId) => {
 
     // When timer ends
     if (session.timeLeft <= 0) {
+      console.log(`Waiting timer ended for session ${sessionId}, starting game`)
       clearInterval(session.waitingTimer)
       session.waitingTimer = null
       startGame(sessionId)
     }
   }, 1000)
-
-  console.log(`Started waiting timer for session ${sessionId}`)
 }
 
 // Start game for a session
 const startGame = (sessionId) => {
   const session = gameSessions.get(sessionId)
   if (!session) return
+
+  console.log(`Starting game for session ${sessionId}`)
 
   // Clear waiting timer if it exists
   if (session.waitingTimer) {
@@ -102,10 +107,12 @@ const startGame = (sessionId) => {
   
   // Immediately send initial time
   io.to(sessionId).emit("game_timer", session.timeLeft)
+  console.log(`Initial game time sent: ${session.timeLeft}ms`)
 
   // Clear existing game timer if any
   if (session.gameTimer) {
     clearInterval(session.gameTimer)
+    session.gameTimer = null
   }
 
   // Start new game timer
@@ -118,14 +125,16 @@ const startGame = (sessionId) => {
 
     // When game time ends
     if (session.timeLeft <= 0) {
+      console.log(`Game timer ended for session ${sessionId}`)
       clearInterval(session.gameTimer)
       session.gameTimer = null
       endGame(sessionId)
     }
   }, 1000)
 
+  // Notify clients that game is starting
   io.to(sessionId).emit("game_start")
-  console.log(`Started game for session ${sessionId}`)
+  console.log(`Game started for session ${sessionId}`)
 }
 
 // End game for a session
@@ -188,8 +197,9 @@ io.on("connection", (socket) => {
     // Send updated player list to all clients in this session
     io.to(session.id).emit("players_updated", session.players)
 
-    // Start waiting timer if this is the first player
-    if (session.players.length === 1) {
+    // Start or restart waiting timer if in waiting state
+    if (session.status === "waiting") {
+      console.log(`Starting/Restarting waiting timer for session ${session.id}`)
       startWaitingTimer(session.id)
     }
   })
