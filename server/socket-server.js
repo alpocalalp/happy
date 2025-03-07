@@ -13,6 +13,11 @@ const io = new Server(server, {
   },
 })
 
+// Constants
+const MAX_PLAYERS = 100
+const WAITING_TIME = 20 * 1000 // 20 seconds
+const MAX_GAME_TIME = 5 * 60 * 1000 // 5 minutes
+
 // Store active game sessions
 const gameSessions = new Map()
 
@@ -21,25 +26,125 @@ const generateSessionId = () => {
   return Math.random().toString(36).substring(2, 9)
 }
 
+// Find or create available session
+const findOrCreateSession = () => {
+  // Look for an available waiting session
+  for (const [id, session] of gameSessions) {
+    if (session.status === "waiting" && session.players.length < MAX_PLAYERS) {
+      return session
+    }
+  }
+
+  // Create new session if no available session found
+  const sessionId = generateSessionId()
+  const newSession = {
+    id: sessionId,
+    players: [],
+    status: "waiting",
+    waitingTimer: null,
+    gameTimer: null,
+  }
+  gameSessions.set(sessionId, newSession)
+  return newSession
+}
+
+// Start waiting timer for a session
+const startWaitingTimer = (sessionId) => {
+  const session = gameSessions.get(sessionId)
+  if (!session) return
+
+  let timeLeft = WAITING_TIME
+
+  // Clear existing timer if any
+  if (session.waitingTimer) {
+    clearInterval(session.waitingTimer)
+  }
+
+  // Start new timer
+  session.waitingTimer = setInterval(() => {
+    timeLeft -= 1000
+
+    // Notify clients about remaining time
+    io.to(sessionId).emit("waiting_timer", timeLeft)
+
+    // When timer ends
+    if (timeLeft <= 0) {
+      clearInterval(session.waitingTimer)
+      startGame(sessionId)
+    }
+  }, 1000)
+}
+
+// Start game for a session
+const startGame = (sessionId) => {
+  const session = gameSessions.get(sessionId)
+  if (!session) return
+
+  session.status = "playing"
+  session.startTime = Date.now()
+  
+  // Start game timer
+  let timeLeft = MAX_GAME_TIME
+
+  if (session.gameTimer) {
+    clearInterval(session.gameTimer)
+  }
+
+  session.gameTimer = setInterval(() => {
+    timeLeft -= 1000
+
+    // Notify clients about remaining time
+    io.to(sessionId).emit("game_timer", timeLeft)
+
+    // When game time ends
+    if (timeLeft <= 0) {
+      clearInterval(session.gameTimer)
+      endGame(sessionId)
+    }
+  }, 1000)
+
+  io.to(sessionId).emit("game_start")
+}
+
+// End game for a session
+const endGame = (sessionId) => {
+  const session = gameSessions.get(sessionId)
+  if (!session) return
+
+  session.status = "finished"
+  session.endTime = Date.now()
+
+  // Sort players by score and time
+  const sortedPlayers = [...session.players].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.timeElapsed - b.timeElapsed
+  })
+
+  io.to(sessionId).emit("game_finished", sortedPlayers)
+
+  // Clean up timers
+  if (session.waitingTimer) {
+    clearInterval(session.waitingTimer)
+  }
+  if (session.gameTimer) {
+    clearInterval(session.gameTimer)
+  }
+}
+
 // Socket.io connection handler
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`)
 
   // Handle player joining
   socket.on("join_game", ({ playerName }) => {
-    // For simplicity, we'll use a single game session for now
-    const sessionId = "default_session"
+    // Find or create available session
+    const session = findOrCreateSession()
 
-    // Create session if it doesn't exist
-    if (!gameSessions.has(sessionId)) {
-      gameSessions.set(sessionId, {
-        id: sessionId,
-        players: [],
-        status: "waiting",
-      })
+    // Check player limit
+    if (session.players.length >= MAX_PLAYERS) {
+      socket.emit("error", "Oyun odası dolu. Lütfen daha sonra tekrar deneyin.")
+      return
     }
-
-    const session = gameSessions.get(sessionId)
 
     // Add player to session
     const player = {
@@ -47,50 +152,27 @@ io.on("connection", (socket) => {
       name: playerName,
       score: 0,
       incorrectCount: 0,
-      isReady: false,
-      isFinished: false,
+      timeElapsed: 0,
     }
 
     session.players.push(player)
 
     // Join the socket room for this session
-    socket.join(sessionId)
-
-    // Send updated player list to all clients in this session
-    io.to(sessionId).emit("players_updated", session.players)
+    socket.join(session.id)
 
     // Store session ID in socket for later reference
-    socket.sessionId = sessionId
-  })
+    socket.sessionId = session.id
 
-  // Handle player ready status
-  socket.on("player_ready", (isReady) => {
-    if (!socket.sessionId) return
+    // Send updated player list to all clients in this session
+    io.to(session.id).emit("players_updated", session.players)
 
-    const session = gameSessions.get(socket.sessionId)
-    if (!session) return
-
-    // Update player ready status
-    const playerIndex = session.players.findIndex((p) => p.id === socket.id)
-    if (playerIndex !== -1) {
-      session.players[playerIndex].isReady = isReady
-
-      // Check if all players are ready
-      const allReady = session.players.every((p) => p.isReady)
-
-      if (allReady && session.players.length > 0) {
-        // Start the game
-        session.status = "playing"
-        session.startTime = Date.now()
-        io.to(socket.sessionId).emit("game_start")
-      }
-
-      // Notify all clients about updated player status
-      io.to(socket.sessionId).emit("players_updated", session.players)
+    // Start waiting timer if this is the first player
+    if (session.players.length === 1) {
+      startWaitingTimer(session.id)
     }
   })
 
-  // Handle player game completion
+  // Handle game completion
   socket.on("game_completed", ({ score, incorrectCount, timeElapsed }) => {
     if (!socket.sessionId) return
 
@@ -103,27 +185,54 @@ io.on("connection", (socket) => {
       session.players[playerIndex].score = score
       session.players[playerIndex].incorrectCount = incorrectCount
       session.players[playerIndex].timeElapsed = timeElapsed
-      session.players[playerIndex].isFinished = true
 
-      // Check if all players have finished
-      const allFinished = session.players.every((p) => p.isFinished)
-
-      if (allFinished) {
-        session.status = "finished"
-        session.endTime = Date.now()
-
-        // Sort players by score (highest first) and time (fastest first)
-        const sortedPlayers = [...session.players].sort((a, b) => {
-          if (b.score !== a.score) return b.score - a.score
-          return a.timeElapsed - b.timeElapsed
-        })
-
-        io.to(socket.sessionId).emit("game_finished", sortedPlayers)
-      } else {
-        // Just update the player list
-        io.to(socket.sessionId).emit("players_updated", session.players)
-      }
+      // Notify all clients about updated scores
+      io.to(socket.sessionId).emit("players_updated", session.players)
     }
+  })
+
+  // Handle cleanup request
+  socket.on("cleanup_players", () => {
+    if (!socket.sessionId) return
+
+    const session = gameSessions.get(socket.sessionId)
+    if (!session) return
+
+    // Clean up timers
+    if (session.waitingTimer) {
+      clearInterval(session.waitingTimer)
+    }
+    if (session.gameTimer) {
+      clearInterval(session.gameTimer)
+    }
+
+    // Remove session
+    gameSessions.delete(socket.sessionId)
+  })
+
+  // Handle reset game request
+  socket.on("reset_game", () => {
+    if (!socket.sessionId) return
+
+    const session = gameSessions.get(socket.sessionId)
+    if (!session) return
+
+    // Clean up timers
+    if (session.waitingTimer) {
+      clearInterval(session.waitingTimer)
+    }
+    if (session.gameTimer) {
+      clearInterval(session.gameTimer)
+    }
+
+    // Reset session
+    session.status = "waiting"
+    session.players = []
+    session.startTime = null
+    session.endTime = null
+
+    // Notify clients
+    io.to(socket.sessionId).emit("players_updated", session.players)
   })
 
   // Handle player disconnect
@@ -138,8 +247,14 @@ io.on("connection", (socket) => {
     // Remove player from session
     session.players = session.players.filter((p) => p.id !== socket.id)
 
-    // If no players left, remove the session
+    // If no players left, clean up the session
     if (session.players.length === 0) {
+      if (session.waitingTimer) {
+        clearInterval(session.waitingTimer)
+      }
+      if (session.gameTimer) {
+        clearInterval(session.gameTimer)
+      }
       gameSessions.delete(socket.sessionId)
     } else {
       // Notify remaining players
