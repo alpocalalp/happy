@@ -7,6 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion, AnimatePresence } from "framer-motion"
 
+const GAME_DURATION = 60 // 60 seconds game duration
+const THOUGHTS = [
+  "Mutluluk", "Heyecan", "Hüzün", "Özlem", "Sevgi",
+  "Umut", "Korku", "Merak", "Şaşkınlık", "Huzur"
+]
+
 export default function Home() {
   const [socket, setSocket] = useState(null)
   const [playerName, setPlayerName] = useState("")
@@ -16,6 +22,13 @@ export default function Home() {
   const [gameFinished, setGameFinished] = useState(false)
   const [results, setResults] = useState([])
   const [error, setError] = useState("")
+  
+  // Game state
+  const [currentThought, setCurrentThought] = useState("")
+  const [selectedThoughts, setSelectedThoughts] = useState([])
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
+  const [score, setScore] = useState(0)
+  const [incorrectCount, setIncorrectCount] = useState(0)
 
   useEffect(() => {
     // Connect to the socket server
@@ -39,11 +52,22 @@ export default function Home() {
 
     socketInstance.on("game_start", () => {
       setGameStarted(true)
+      startGame()
     })
 
     socketInstance.on("game_finished", (gameResults) => {
       setGameFinished(true)
       setResults(gameResults)
+    })
+
+    socketInstance.on("thought_match", ({ thought, matches }) => {
+      if (matches) {
+        setScore(prev => prev + 10)
+        // Show success feedback
+      } else {
+        setIncorrectCount(prev => prev + 1)
+        // Show error feedback
+      }
     })
 
     setSocket(socketInstance)
@@ -53,12 +77,36 @@ export default function Home() {
     }
   }, [])
 
+  // Game timer
+  useEffect(() => {
+    let timer
+    if (gameStarted && !gameFinished && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            handleGameComplete()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+    return () => clearInterval(timer)
+  }, [gameStarted, gameFinished, timeLeft])
+
+  const startGame = () => {
+    setTimeLeft(GAME_DURATION)
+    setScore(0)
+    setIncorrectCount(0)
+    setSelectedThoughts([])
+    setCurrentThought(THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)])
+  }
+
   const handleJoinGame = () => {
     if (!playerName.trim()) {
       setError("Please enter your name")
       return
     }
-
     socket?.emit("join_game", { playerName })
   }
 
@@ -67,12 +115,32 @@ export default function Home() {
     socket?.emit("player_ready", !isReady)
   }
 
+  const handleThoughtSelect = (thought) => {
+    if (selectedThoughts.includes(thought)) return
+
+    setSelectedThoughts(prev => [...prev, thought])
+    socket?.emit("submit_thought", { thought })
+    
+    // Get next thought
+    const remainingThoughts = THOUGHTS.filter(t => !selectedThoughts.includes(t))
+    if (remainingThoughts.length > 0) {
+      setCurrentThought(remainingThoughts[Math.floor(Math.random() * remainingThoughts.length)])
+    }
+  }
+
   const handleGameComplete = () => {
     socket?.emit("game_completed", {
-      score: Math.floor(Math.random() * 100), // Example score
-      incorrectCount: Math.floor(Math.random() * 10),
-      timeElapsed: Math.floor(Math.random() * 60000)
+      score,
+      incorrectCount,
+      timeElapsed: GAME_DURATION - timeLeft
     })
+    setGameFinished(true)
+  }
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   return (
@@ -133,13 +201,29 @@ export default function Home() {
             </div>
           ) : !gameFinished ? (
             <div className="space-y-4">
-              <h3 className="font-semibold text-center">Game in Progress</h3>
-              <Button
-                className="w-full"
-                onClick={handleGameComplete}
-              >
-                Complete Game
-              </Button>
+              <div className="flex justify-between items-center mb-4">
+                <div className="text-sm font-medium">Score: {score}</div>
+                <div className="text-sm font-medium">Time: {formatTime(timeLeft)}</div>
+              </div>
+              
+              <div className="p-4 bg-white rounded-lg border text-center mb-4">
+                <h3 className="text-lg font-semibold mb-2">Current Thought</h3>
+                <p className="text-2xl font-bold text-blue-600">{currentThought}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {THOUGHTS.map((thought) => (
+                  <Button
+                    key={thought}
+                    onClick={() => handleThoughtSelect(thought)}
+                    disabled={selectedThoughts.includes(thought)}
+                    variant={selectedThoughts.includes(thought) ? "secondary" : "default"}
+                    className="w-full"
+                  >
+                    {thought}
+                  </Button>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
