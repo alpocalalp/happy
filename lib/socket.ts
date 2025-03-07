@@ -5,27 +5,36 @@ let socket: any
 
 export const initializeSocket = () => {
   if (!socket) {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
+    // Render'daki socket sunucusunun URL'i
+    const socketUrl = "https://thought-matching-game-socket.onrender.com"
 
     console.log("Connecting to socket server at:", socketUrl)
     
     socket = io(socketUrl, {
-      // Hem websocket hem polling destekle (Render için önemli)
-      transports: ["websocket"],
+      // Hem websocket hem polling destekle
+      transports: ["websocket", "polling"],
       // Bağlantı sorunlarında yeniden bağlanma ayarları
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity, // Sürekli yeniden bağlanmayı dene
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 20000,
-      autoConnect: true
+      autoConnect: true,
+      forceNew: true
     })
     
-    // Hata ayıklama için bağlantı olay dinleyicileri ekle
+    // Hata ayıklama için bağlantı olay dinleyicileri
     socket.on("connect", () => {
       console.log("Socket connected successfully with ID:", socket.id)
     })
     
     socket.on("connect_error", (err: any) => {
       console.error("Socket connection error:", err.message)
+      // Hata durumunda yeniden bağlanmayı dene
+      setTimeout(() => {
+        if (!socket.connected) {
+          socket.connect()
+        }
+      }, 1000)
     })
     
     socket.on("disconnect", (reason: string) => {
@@ -36,7 +45,7 @@ export const initializeSocket = () => {
           console.log("Attempting to reconnect...")
           socket.connect()
         }
-      }, 5000)
+      }, 1000)
     })
   }
   return socket
