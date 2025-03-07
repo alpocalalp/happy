@@ -8,11 +8,6 @@ services:
     envVars:
       - key: PORT
         value: 10000
-      - key: FRONTEND_URL
-        fromService:
-          name: thought-matching-game-frontend
-          type: web
-          property: url
 
   # Next.js Frontend
   - type: web
@@ -22,7 +17,4 @@ services:
     startCommand: npm start
     envVars:
       - key: NEXT_PUBLIC_SOCKET_URL
-        fromService:
-          name: thought-matching-game-socket
-          type: web
-          property: url 
+        value: https://thought-matching-game-socket.onrender.com 
