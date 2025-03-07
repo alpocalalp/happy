@@ -1,20 +1,25 @@
 const http = require("http")
 const { Server } = require("socket.io")
+const express = require("express")
 const cors = require("cors")
 
-// Create HTTP server
-const server = http.createServer()
+// Express uygulaması oluştur
+const app = express()
+app.use(cors())
+
+// HTTP sunucusu oluştur
+const server = http.createServer(app)
 
 // Initialize Socket.io with CORS configuration
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
+    credentials: true
   },
+  transports: ["websocket", "polling"],
   pingTimeout: 60000,
   pingInterval: 25000,
-  transports: ["websocket"],
-  allowEIO3: true
 })
 
 // Constants
@@ -206,65 +211,63 @@ io.on("connection", (socket) => {
   // Handle player joining
   socket.on("join_game", ({ playerName }) => {
     try {
-      console.log(`Player ${playerName} attempting to join game`)
-      
-      // Basitlik için, şimdilik tek bir oyun oturumu kullanacağız
-      const sessionId = "default_session"
+      let session;
 
-      // Oturum yoksa oluştur
-      if (!gameSessions.has(sessionId)) {
-        console.log(`Creating new session: ${sessionId}`)
-        gameSessions.set(sessionId, {
-          id: sessionId,
-          players: [],
-          status: GameState.WAITING,
-          waitingTimer: null,
-          gameTimer: null,
-          timeLeft: WAITING_TIME,
-          startTime: null,
-          endTime: null,
-        })
-      }
+      // Find or create available session
+      const existingSession = findOrCreateSession()
 
-      const session = gameSessions.get(sessionId)
-
-      // Eğer oyuncu zaten oturumda varsa, güncelle
-      const existingPlayerIndex = session.players.findIndex(p => p.id === socket.id)
-      if (existingPlayerIndex !== -1) {
-        console.log(`Updating existing player: ${playerName}`)
-        session.players[existingPlayerIndex] = {
-          ...session.players[existingPlayerIndex],
-          name: playerName,
-        }
+      // Check if game is already in progress
+      if (existingSession.status !== GameState.WAITING) {
+        session = createGameSession()
+        socket.emit("info", "Yeni bir oyun odasına yönlendiriliyorsunuz.")
       } else {
-        // Yeni oyuncu ekle
-        console.log(`Adding new player: ${playerName}`)
-        const player = {
-          id: socket.id,
-          name: playerName,
-          score: 0,
-          incorrectCount: 0,
-          timeElapsed: 0,
-          isReady: false,
-          isFinished: false,
+        session = existingSession
+      }
+
+      // Check player limit
+      if (session.players.length >= MAX_PLAYERS) {
+        socket.emit("error", "Oyun odası dolu. Lütfen daha sonra tekrar deneyin.")
+        return
+      }
+
+      // Leave previous session if exists
+      if (socket.sessionId) {
+        const oldSession = gameSessions.get(socket.sessionId)
+        if (oldSession) {
+          oldSession.players = oldSession.players.filter(p => p.id !== socket.id)
+          socket.leave(oldSession.id)
+          io.to(oldSession.id).emit("players_updated", oldSession.players)
         }
-        session.players.push(player)
       }
 
-      // Socket odasına katıl
-      socket.join(sessionId)
-      socket.sessionId = sessionId
+      // Add player to session
+      const player = {
+        id: socket.id,
+        name: playerName,
+        score: 0,
+        incorrectCount: 0,
+        timeElapsed: 0,
+      }
 
-      // Güncellenmiş oyuncu listesini tüm istemcilere gönder
-      io.to(sessionId).emit("players_updated", session.players)
+      session.players.push(player)
 
-      // Eğer bekleme durumundaysa timer'ı başlat/yeniden başlat
+      // Join the socket room for this session
+      socket.join(session.id)
+      socket.sessionId = session.id
+
+      // Send updated player list to all clients in this session
+      io.to(session.id).emit("players_updated", session.players)
+
+      // Start or restart waiting timer
       if (session.status === GameState.WAITING) {
-        console.log(`Starting/Restarting waiting timer for session ${sessionId}`)
-        startWaitingTimer(sessionId)
+        console.log(`Starting/Restarting waiting timer for session ${session.id}`)
+        // Clear any existing timer first
+        clearSessionTimers(session)
+        // Start new timer
+        startWaitingTimer(session.id)
       }
 
-      console.log(`Player ${playerName} (${socket.id}) successfully joined session ${sessionId}`)
+      console.log(`Player ${playerName} (${socket.id}) joined session ${session.id}`)
     } catch (error) {
       console.error("Error in join_game:", error)
       socket.emit("error", "Oyuna katılırken bir hata oluştu. Lütfen tekrar deneyin.")
@@ -336,30 +339,29 @@ io.on("connection", (socket) => {
   })
 
   // Handle player disconnect
-  socket.on("disconnect", (reason) => {
+  socket.on("disconnect", () => {
     try {
-      console.log(`User disconnected: ${socket.id}, reason: ${reason}`)
+      console.log(`User disconnected: ${socket.id}`)
 
       if (!socket.sessionId) return
 
       const session = gameSessions.get(socket.sessionId)
       if (!session) return
 
-      // Oyuncuyu oturumdan kaldır
+      // Remove player from session
       session.players = session.players.filter((p) => p.id !== socket.id)
-      console.log(`Removed player ${socket.id} from session ${socket.sessionId}`)
 
-      // Oyuncu kalmadıysa, oturumu temizle
+      // If no players left, clean up the session
       if (session.players.length === 0) {
-        console.log(`Cleaning up empty session ${socket.sessionId}`)
         clearSessionTimers(session)
         gameSessions.delete(socket.sessionId)
+        console.log(`Removed empty session ${socket.sessionId}`)
       } else {
-        // Kalan oyunculara güncel listeyi gönder
+        // Notify remaining players
         io.to(socket.sessionId).emit("players_updated", session.players)
       }
     } catch (error) {
-      console.error("Error in disconnect handler:", error)
+      console.error("Error in disconnect:", error)
     }
   })
 })
