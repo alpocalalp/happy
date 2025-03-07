@@ -60,10 +60,11 @@
     "zod": "^3.24.1",
     "@emotion/is-prop-valid": "latest",
     "framer-motion": "latest",
-    "socket.io-client": "latest",
+    "socket.io-client": "^4.7.2",
     "http": "latest",
-    "socket.io": "latest",
-    "cors": "latest"
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   },
   "devDependencies": {
     "@types/node": "^22",

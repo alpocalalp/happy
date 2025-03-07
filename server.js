@@ -1,16 +1,30 @@
 const http = require("http")
 const { Server } = require("socket.io")
 const cors = require("cors")
+const express = require("express")
 
-// Create HTTP server
-const server = http.createServer()
+// Create Express app
+const app = express()
+app.use(cors())
+
+// Add a health check endpoint for Render
+app.get("/health", (req, res) => {
+  res.status(200).send("OK")
+})
+
+// Create HTTP server with Express
+const server = http.createServer(app)
 
 // Initialize Socket.io with CORS configuration
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    // Allow connections from your frontend domain
+    origin: process.env.FRONTEND_URL || "*",
     methods: ["GET", "POST"],
+    credentials: true
   },
+  // Enable WebSocket transport
+  transports: ["websocket", "polling"]
 })
 
 // Store active game sessions

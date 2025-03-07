@@ -1,0 +1,28 @@
+services:
+  # Socket.IO Server
+  - type: web
+    name: thought-matching-game-socket
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: FRONTEND_URL
+        fromService:
+          name: thought-matching-game-frontend
+          type: web
+          property: url
+
+  # Next.js Frontend
+  - type: web
+    name: thought-matching-game-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_SOCKET_URL
+        fromService:
+          name: thought-matching-game-socket
+          type: web
+          property: url 

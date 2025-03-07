@@ -8,16 +8,31 @@ if (typeof window === "undefined") {
   // Bu kod sadece sunucu tarafında çalışacak
   const { createServer } = require("http")
   const { Server } = require("socket.io")
+  const express = require("express")
+  const cors = require("cors")
+
+  // Express uygulaması oluştur
+  const app = express()
+  app.use(cors())
+
+  // Render için sağlık kontrolü endpoint'i ekle
+  app.get("/health", (req, res) => {
+    res.status(200).send("OK")
+  })
 
   // HTTP sunucusu oluştur
-  const httpServer = createServer()
+  const httpServer = createServer(app)
 
   // Socket.io sunucusunu başlat
   io = new Server(httpServer, {
     cors: {
-      origin: "*",
+      // Frontend uygulamanızdan bağlantılara izin ver
+      origin: process.env.FRONTEND_URL || "*",
       methods: ["GET", "POST"],
+      credentials: true
     },
+    // WebSocket transport'u etkinleştir
+    transports: ["websocket", "polling"]
   })
 
   // Socket.io bağlantı işleyicisi
@@ -158,6 +173,9 @@ if (typeof window === "undefined") {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: "Socket.io server is running" })
+  return NextResponse.json({ 
+    status: "Socket.io server is running",
+    info: "This API route is running a Socket.IO server for real-time communication"
+  })
 }
 
