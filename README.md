@@ -1,87 +1,79 @@
 # Düşünce Eşleştirme Oyunu
 
-Çok oyunculu bir düşünce eşleştirme oyunu. Oyuncular farklı düşünce modlarını doğru şekilde eşleştirmeye çalışırlar.
+Bu proje, psikolojik modları öğretmeyi amaçlayan interaktif bir çok oyunculu web oyunudur.
 
 ## Özellikler
 
-- Çok oyunculu destek (maksimum 100 oyuncu)
-- 20 saniyelik bekleme süresi
+- Çok oyunculu gerçek zamanlı oyun deneyimi
+- 20 saniyelik bekleme süresi ile oyuncu eşleştirme
+- Maksimum 100 oyuncu desteği
 - 5 dakikalık oyun süresi
-- Gerçek zamanlı skor takibi
-- Otomatik oyun başlatma
-- Liderlik tablosu
+- Otomatik puan hesaplama ve liderlik tablosu
+- Farklı psikolojik modları öğrenme fırsatı
 
-## Oyun Kuralları
-
-1. Oyuncu isim girerek oyuna katılır
-2. İlk oyuncu katıldığında 20 saniyelik bekleme süresi başlar
-3. Bu süre içinde başka oyuncular da katılabilir
-4. 20 saniye sonunda oyun otomatik olarak başlar
-5. Oyun maksimum 5 dakika sürer
-6. En çok doğru cevabı veren oyuncu kazanır
-7. Oyun başladıktan sonra yeni oyuncu katılamaz
-
-## Teknik Özellikler
+## Teknolojiler
 
 - Next.js 15.1.0
+- React 19
 - Socket.IO
 - TypeScript
 - Tailwind CSS
-- Radix UI
 - Framer Motion
 
 ## Kurulum
 
-1. Repoyu klonlayın:
-```bash
+1. Projeyi klonlayın:
+\`\`\`bash
 git clone [repo-url]
-```
+cd thought-matching-game
+\`\`\`
 
 2. Bağımlılıkları yükleyin:
-```bash
+\`\`\`bash
 npm install
-```
+\`\`\`
 
 3. Geliştirme sunucusunu başlatın:
-```bash
+\`\`\`bash
 # Terminal 1: Socket.IO sunucusu
 node server.js
 
 # Terminal 2: Next.js uygulaması
 npm run dev
-```
+\`\`\`
 
-4. Tarayıcıda açın:
-```
-http://localhost:3000
-```
+4. Tarayıcınızda http://localhost:3000 adresini açın
 
-## Ortam Değişkenleri
+## Oyun Kuralları
 
-```env
-NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
-```
+1. Kullanıcı Kaydı ve Oyun Başlatma:
+   - Oyuna giriş yapıldığında kurallar ekranı gösterilir
+   - İsim girişi yapılır
+   - 20 saniyelik bekleme süresi başlar
+   - Bu süre içinde başka oyuncular katılabilir
+   - Süre sonunda oyun otomatik başlar
+
+2. Oyun Mekanikleri:
+   - Her soru için belirli bir süre vardır
+   - Doğru cevaplar puan kazandırır
+   - En çok puanı toplayan oyuncu kazanır
+
+3. Katılım Kuralları:
+   - 20 saniyelik bekleme süresi boyunca maksimum 100 oyuncu katılabilir
+   - Oyun başladıktan sonra yeni oyuncular katılamaz
+   - Yeni gelen oyuncular için yeni bir oturum oluşturulur
+
+4. Oyun Süresi:
+   - Her oyun maksimum 5 dakika sürer
+   - Süre bitiminde otomatik olarak sonuçlar gösterilir
 
 ## Test
 
-Socket.IO olaylarını test etmek için:
+Oyun mantığını test etmek için:
 
-```bash
+\`\`\`bash
 node test-socket.js
-```
-
-## Dağıtım
-
-1. Projeyi derleyin:
-```bash
-npm run build
-```
-
-2. Sunucuyu başlatın:
-```bash
-node server.js
-npm start
-```
+\`\`\`
 
 ## Lisans
 
