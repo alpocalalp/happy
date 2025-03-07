@@ -5,11 +5,7 @@ let socket: any
 
 export const initializeSocket = () => {
   if (!socket) {
-    // Öncelikle çevresel değişkenden Socket.IO sunucu URL'sini al
-    // Eğer belirtilmemişse, API route'u kullan
-    const socketUrl =
-      process.env.NEXT_PUBLIC_SOCKET_URL ||
-      (typeof window !== "undefined" ? `${window.location.origin}/api/socket` : "")
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
 
     console.log("Connecting to socket server at:", socketUrl)
     
@@ -19,7 +15,8 @@ export const initializeSocket = () => {
       // Bağlantı sorunlarında yeniden bağlanma ayarları
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      timeout: 20000
+      timeout: 20000,
+      autoConnect: true
     })
     
     // Hata ayıklama için bağlantı olay dinleyicileri ekle
@@ -33,6 +30,13 @@ export const initializeSocket = () => {
     
     socket.on("disconnect", (reason: string) => {
       console.log("Socket disconnected:", reason)
+      // Yeniden bağlanma denemesi
+      setTimeout(() => {
+        if (!socket.connected) {
+          console.log("Attempting to reconnect...")
+          socket.connect()
+        }
+      }, 5000)
     })
   }
   return socket
@@ -43,5 +47,12 @@ export const getSocket = () => {
     return initializeSocket()
   }
   return socket
+}
+
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect()
+    socket = null
+  }
 }
 

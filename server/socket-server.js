@@ -1,25 +1,16 @@
 const http = require("http")
 const { Server } = require("socket.io")
-const express = require("express")
 const cors = require("cors")
 
-// Express uygulaması oluştur
-const app = express()
-app.use(cors())
-
-// HTTP sunucusu oluştur
-const server = http.createServer(app)
+// Create HTTP server
+const server = http.createServer()
 
 // Initialize Socket.io with CORS configuration
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-    credentials: true
   },
-  transports: ["websocket", "polling"],
-  pingTimeout: 60000,
-  pingInterval: 25000,
 })
 
 // Constants

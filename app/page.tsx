@@ -177,16 +177,13 @@ export default function ThoughtMatchingGame() {
   // Socket bağlantısı ve event dinleyicileri
   useEffect(() => {
     let socket = initializeSocket()
-    let reconnectTimer: NodeJS.Timeout | null = null
 
     const setupSocketListeners = (socket: any) => {
       socket.on("connect", () => {
         console.log("Connected to socket server")
         setError("")
-        
-        // Eğer oyun waiting state'indeyse ve oyuncu adı varsa, oyuna katıl
-        if (gameState === "waiting" && playerName) {
-          console.log("Reconnecting and rejoining game...")
+        // Eğer oyuncu adı varsa, otomatik olarak oyuna katıl
+        if (playerName && gameState === "name") {
           socket.emit("join_game", { playerName })
         }
       })
@@ -210,30 +207,33 @@ export default function ThoughtMatchingGame() {
         setIsMultiplayer(uniquePlayers.length > 1)
       })
 
-      socket.on("waiting_timer", (timeLeft: number) => {
-        console.log("Waiting timer update:", timeLeft)
-        setWaitingTimer(timeLeft)
+      socket.on("countdown_update", (seconds: number) => {
+        console.log("Countdown update:", seconds)
+        setWaitingTimer(seconds * 1000)
       })
 
-      socket.on("game_timer", (timeLeft: number) => {
-        console.log("Game timer update:", timeLeft)
-        setGameTimer(timeLeft)
-        if (timeLeft <= 0) {
+      socket.on("game_timer", (seconds: number) => {
+        console.log("Game timer update:", seconds)
+        setGameTimer(seconds * 1000)
+        if (seconds <= 0) {
           handleGameEnd()
         }
       })
 
-      socket.on("game_start", () => {
-        console.log("Game starting...")
+      socket.on("game_start", (data: { isMultiplayer: boolean, players: Player[] }) => {
+        console.log("Game starting...", data)
         setGameState("playing")
         setStartTime(Date.now())
         setWaitingTimer(0)
+        setIsMultiplayer(data.isMultiplayer)
+        setPlayers(data.players)
       })
 
       socket.on("game_finished", (finalLeaderboard: Player[]) => {
         console.log("Game finished, leaderboard:", finalLeaderboard)
         setLeaderboard(finalLeaderboard)
         setGameState("leaderboard")
+        setEndTime(Date.now())
       })
 
       socket.on("error", (message: string) => {
@@ -245,80 +245,79 @@ export default function ThoughtMatchingGame() {
     setupSocketListeners(socket)
 
     // Bağlantı koptuğunda yeniden bağlanma denemesi
-    const checkConnection = () => {
+    const reconnectInterval = setInterval(() => {
       if (!socket.connected) {
-        console.log("Connection lost, attempting to reconnect...")
+        console.log("Attempting to reconnect...")
         socket = initializeSocket()
         setupSocketListeners(socket)
       }
-    }
-
-    reconnectTimer = setInterval(checkConnection, 3000)
+    }, 5000)
 
     return () => {
-      if (reconnectTimer) {
-        clearInterval(reconnectTimer)
-      }
+      clearInterval(reconnectInterval)
       socket.disconnect()
     }
   }, [playerName, gameState])
 
-  // Oyun bitişi işleyicisi
-  const handleGameEnd = () => {
-    const endTime = Date.now()
-    setEndTime(endTime)
-    setGameState("success")
-
-    try {
-      const socket = getSocket()
-      if (!socket || !socket.connected) {
-        setError("Sunucu bağlantısı koptu. Skorunuz kaydedilemeyebilir.")
-        return
-      }
-
-      const timeElapsed = startTime ? endTime - startTime : 0
-      socket.emit("game_completed", {
-        score,
-        incorrectCount,
-        timeElapsed,
-      })
-    } catch (err) {
-      console.error("Error completing game:", err)
-      setError("Oyun sonucu gönderilirken bir hata oluştu.")
-    }
-  }
-
+  // İsim girme ve oyuna katılma
   const handleJoinGame = () => {
     if (!playerName.trim()) {
-      setError("Lütfen adınızı girin")
+      setError("Lütfen bir isim girin")
       return
     }
 
-    try {
-      const socket = getSocket()
-      if (!socket) {
-        console.log("Creating new socket connection...")
-        const newSocket = initializeSocket()
-        newSocket.connect()
-        
-        newSocket.once("connect", () => {
-          console.log("New socket connection established")
-          newSocket.emit("join_game", { playerName: playerName.trim() })
-          setGameState("waiting")
-          setError("")
-          setWaitingTimer(WAITING_TIME)
-        })
-      } else {
-        console.log("Using existing socket connection")
-        socket.emit("join_game", { playerName: playerName.trim() })
-        setGameState("waiting")
-        setError("")
-        setWaitingTimer(WAITING_TIME)
-      }
-    } catch (err) {
-      console.error("Error joining game:", err)
-      setError("Oyuna katılırken bir hata oluştu. Lütfen tekrar deneyin.")
+    const socket = getSocket()
+    if (!socket) {
+      setError("Sunucu bağlantısı kurulamadı")
+      return
     }
+
+    socket.emit("join_game", { playerName })
+    setGameState("waiting")
+    setError("")
+  }
+
+  // Cevap gönderme
+  const handleAnswerSubmit = (answer: string) => {
+    const socket = getSocket()
+    if (!socket) return
+
+    const isCorrect = answer === questions[currentQuestionIndex].correctAnswer
+    const timeElapsed = Date.now() - (startTime || 0)
+
+    socket.emit("submit_answer", {
+      answer: { isCorrect },
+      timeElapsed
+    })
+
+    if (isCorrect) {
+      setScore(prev => prev + 1)
+    } else {
+      setIncorrectCount(prev => prev + 1)
+    }
+
+    setSelectedAnswer(answer)
+    setIsCorrect(isCorrect)
+
+    // Kısa bir süre sonra sonraki soruya geç
+    setTimeout(() => {
+      setCurrentQuestionIndex(prev => (prev + 1) % questions.length)
+      setSelectedAnswer(null)
+      setIsCorrect(null)
+    }, 1500)
+  }
+
+  // Oyun bitişi
+  const handleGameEnd = () => {
+    const socket = getSocket()
+    if (!socket) return
+
+    const finalTime = Date.now() - (startTime || 0)
+    socket.emit("game_completed", {
+      score,
+      incorrectCount,
+      timeElapsed: finalTime
+    })
   }
 
   const handleToggleReady = () => {
@@ -335,47 +334,6 @@ export default function ThoughtMatchingGame() {
     } catch (err) {
       console.error("Error toggling ready state:", err)
       setError("Hazır durumu değiştirilirken bir hata oluştu.")
-    }
-  }
-
-  const handleSelectAnswer = (answer: string) => {
-    setSelectedAnswer(answer)
-    const correct = answer === questions[currentQuestionIndex].correctAnswer
-    setIsCorrect(correct)
-
-    if (correct) {
-      setScore(score + 1)
-    } else {
-      setIncorrectCount(incorrectCount + 1)
-    }
-  }
-
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
-      setSelectedAnswer(null)
-      setIsCorrect(null)
-    } else {
-      setEndTime(Date.now())
-      setGameState("success")
-
-      try {
-        const socket = getSocket()
-        if (!socket || !socket.connected) {
-          setError("Sunucu bağlantısı koptu. Skorunuz kaydedilemeyebilir.")
-          return
-        }
-
-        const timeElapsed = startTime ? Date.now() - startTime : 0
-        socket.emit("game_completed", {
-          score,
-          incorrectCount,
-          timeElapsed,
-        })
-      } catch (err) {
-        console.error("Error completing game:", err)
-        setError("Oyun sonucu gönderilirken bir hata oluştu.")
-      }
     }
   }
 
@@ -595,7 +553,7 @@ export default function ThoughtMatchingGame() {
                   transition={{ type: "spring", stiffness: 400, damping: 10 }}
                 >
                   <Button
-                    onClick={() => handleSelectAnswer(option)}
+                    onClick={() => handleAnswerSubmit(option)}
                     disabled={selectedAnswer !== null}
                     className={`w-full justify-between px-6 py-4 text-left rounded-xl border-2 shadow-sm ${
                       selectedAnswer === option
@@ -642,7 +600,7 @@ export default function ThoughtMatchingGame() {
               >
                 <Button 
                   className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-medium py-3"
-                  onClick={handleNextQuestion}
+                  onClick={handleAnswerSubmit}
                 >
                   {currentQuestionIndex < questions.length - 1 ? "Sonraki Soru" : "Oyunu Bitir"}
                 </Button>

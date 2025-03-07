@@ -1,90 +1,88 @@
-# Thought Matching Game
+# Düşünce Eşleştirme Oyunu
 
-A multiplayer game where players match thoughts using Socket.IO for real-time communication.
+Çok oyunculu bir düşünce eşleştirme oyunu. Oyuncular farklı düşünce modlarını doğru şekilde eşleştirmeye çalışırlar.
 
-## Deploying to Render
+## Özellikler
 
-You have two options for deploying your Socket.IO server on Render:
+- Çok oyunculu destek (maksimum 100 oyuncu)
+- 20 saniyelik bekleme süresi
+- 5 dakikalık oyun süresi
+- Gerçek zamanlı skor takibi
+- Otomatik oyun başlatma
+- Liderlik tablosu
 
-### Option 1: Deploy as a Single Next.js App (Recommended for simplicity)
+## Oyun Kuralları
 
-With this option, the Socket.IO server runs inside the Next.js API route.
+1. Oyuncu isim girerek oyuna katılır
+2. İlk oyuncu katıldığında 20 saniyelik bekleme süresi başlar
+3. Bu süre içinde başka oyuncular da katılabilir
+4. 20 saniye sonunda oyun otomatik olarak başlar
+5. Oyun maksimum 5 dakika sürer
+6. En çok doğru cevabı veren oyuncu kazanır
+7. Oyun başladıktan sonra yeni oyuncu katılamaz
 
-1. Create a Web Service on Render
-2. Connect your GitHub repository
-3. Configure the service:
-   - **Name**: thought-matching-game
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-   - **Environment Variables**:
-     - `PORT`: 3000 (or any port Render assigns)
+## Teknik Özellikler
 
-4. Click "Create Web Service"
+- Next.js 15.1.0
+- Socket.IO
+- TypeScript
+- Tailwind CSS
+- Radix UI
+- Framer Motion
 
-### Option 2: Deploy Separate Frontend and Socket.IO Server
+## Kurulum
 
-This option gives you more control and scalability by running the Socket.IO server separately.
+1. Repoyu klonlayın:
+```bash
+git clone [repo-url]
+```
 
-#### 1. Deploy the Socket.IO Server
+2. Bağımlılıkları yükleyin:
+```bash
+npm install
+```
 
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Configure the service:
-   - **Name**: thought-matching-game-socket
-   - **Runtime**: Node
-   - **Build Command**: `npm install`
-   - **Start Command**: `node server.js`
-   - **Environment Variables**:
-     - `PORT`: 10000 (or any port Render assigns)
+3. Geliştirme sunucusunu başlatın:
+```bash
+# Terminal 1: Socket.IO sunucusu
+node server.js
 
-4. Click "Create Web Service"
-5. After deployment, note the URL of your Socket.IO server (e.g., https://thought-matching-game-socket.onrender.com)
+# Terminal 2: Next.js uygulaması
+npm run dev
+```
 
-#### 2. Deploy the Next.js Frontend
+4. Tarayıcıda açın:
+```
+http://localhost:3000
+```
 
-1. Create another Web Service on Render
-2. Connect the same GitHub repository
-3. Configure the service:
-   - **Name**: thought-matching-game-frontend
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-   - **Environment Variables**:
-     - `NEXT_PUBLIC_SOCKET_URL`: URL of your Socket.IO server from step 5 above
+## Ortam Değişkenleri
 
-4. Click "Create Web Service"
-5. After deployment, go back to your Socket.IO server service and add the environment variable:
-   - `FRONTEND_URL`: URL of your frontend app (e.g., https://thought-matching-game-frontend.onrender.com)
-6. Redeploy your Socket.IO server for the changes to take effect
+```env
+NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
+```
 
-## Using Render Blueprint (render.yaml)
+## Test
 
-For easier deployment, you can use the included `render.yaml` file:
+Socket.IO olaylarını test etmek için:
 
-1. Fork this repository
-2. Go to your Render dashboard
-3. Click "New" and select "Blueprint"
-4. Connect your forked repository
-5. Render will automatically create both services
+```bash
+node test-socket.js
+```
 
-**Important**: After deployment, you need to manually update the `NEXT_PUBLIC_SOCKET_URL` environment variable in the frontend service with the actual URL of your Socket.IO server, and add the `FRONTEND_URL` environment variable to your Socket.IO server with the URL of your frontend.
+## Dağıtım
 
-## Local Development
+1. Projeyi derleyin:
+```bash
+npm run build
+```
 
-1. Install dependencies:
-   ```
-   npm install
-   ```
+2. Sunucuyu başlatın:
+```bash
+node server.js
+npm start
+```
 
-2. Start the Next.js development server (includes Socket.IO in API route):
-   ```
-   npm run dev
-   ```
+## Lisans
 
-3. Open http://localhost:3000 in your browser
-
-4. (Optional) If you want to run the standalone Socket.IO server:
-   ```
-   node server.js
-   ``` 
+MIT 
