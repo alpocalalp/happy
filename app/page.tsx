@@ -177,20 +177,36 @@ export default function ThoughtMatchingGame() {
   // Socket bağlantısı ve event dinleyicileri
   useEffect(() => {
     let socket = initializeSocket()
+    let reconnectTimer: NodeJS.Timeout | null = null
+    let isInitialConnection = true
 
     const setupSocketListeners = (socket: any) => {
       socket.on("connect", () => {
         console.log("Connected to socket server")
         setError("")
-        // Eğer oyuncu adı varsa, otomatik olarak oyuna katıl
-        if (playerName && gameState === "name") {
+        
+        // Sadece yeniden bağlantıda ve oyun waiting state'indeyse oyuna katıl
+        if (!isInitialConnection && gameState === "waiting" && playerName) {
+          console.log("Reconnecting and rejoining game...")
           socket.emit("join_game", { playerName })
         }
+        isInitialConnection = false
       })
 
       socket.on("connect_error", (err: Error) => {
         console.error("Socket connection error:", err)
         setError("Sunucuya bağlanılamadı. Yeniden bağlanılıyor...")
+        
+        // Yeniden bağlanma denemesi
+        if (!reconnectTimer) {
+          reconnectTimer = setInterval(() => {
+            if (!socket.connected) {
+              console.log("Attempting to reconnect...")
+              socket = initializeSocket()
+              setupSocketListeners(socket)
+            }
+          }, 3000)
+        }
       })
 
       socket.on("disconnect", () => {
@@ -241,20 +257,13 @@ export default function ThoughtMatchingGame() {
 
     setupSocketListeners(socket)
 
-    // Bağlantı koptuğunda yeniden bağlanma denemesi
-    const reconnectInterval = setInterval(() => {
-      if (!socket.connected) {
-        console.log("Attempting to reconnect...")
-        socket = initializeSocket()
-        setupSocketListeners(socket)
-      }
-    }, 5000)
-
     return () => {
-      clearInterval(reconnectInterval)
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer)
+      }
       socket.disconnect()
     }
-  }, [playerName]) // playerName değiştiğinde socket bağlantısını yenile
+  }, [playerName, gameState])
 
   // Oyun bitişi işleyicisi
   const handleGameEnd = () => {
@@ -289,18 +298,23 @@ export default function ThoughtMatchingGame() {
 
     try {
       const socket = getSocket()
-      
-      // Socket bağlantısını kontrol et
       if (!socket || !socket.connected) {
         console.log("Socket not connected, initializing new connection...")
         const newSocket = initializeSocket()
         
-        newSocket.on("connect", () => {
+        // Bağlantı başarılı olduğunda oyuna katıl
+        newSocket.once("connect", () => {
           console.log("New socket connection established")
           newSocket.emit("join_game", { playerName: playerName.trim() })
           setGameState("waiting")
           setError("")
           setWaitingTimer(WAITING_TIME)
+        })
+
+        // Bağlantı hatası durumunda
+        newSocket.once("connect_error", (err: Error) => {
+          console.error("Socket connection error:", err)
+          setError("Sunucuya bağlanılamadı. Lütfen tekrar deneyin.")
         })
       } else {
         console.log("Using existing socket connection")
