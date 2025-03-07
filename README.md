@@ -37,9 +37,9 @@ This option gives you more control and scalability by running the Socket.IO serv
    - **Start Command**: `node server.js`
    - **Environment Variables**:
      - `PORT`: 10000 (or any port Render assigns)
-     - `FRONTEND_URL`: URL of your frontend app (e.g., https://your-frontend-app.onrender.com)
 
 4. Click "Create Web Service"
+5. After deployment, note the URL of your Socket.IO server (e.g., https://thought-matching-game-socket.onrender.com)
 
 #### 2. Deploy the Next.js Frontend
 
@@ -51,9 +51,12 @@ This option gives you more control and scalability by running the Socket.IO serv
    - **Build Command**: `npm install && npm run build`
    - **Start Command**: `npm start`
    - **Environment Variables**:
-     - `NEXT_PUBLIC_SOCKET_URL`: URL of your Socket.IO server (e.g., https://thought-matching-game-socket.onrender.com)
+     - `NEXT_PUBLIC_SOCKET_URL`: URL of your Socket.IO server from step 5 above
 
 4. Click "Create Web Service"
+5. After deployment, go back to your Socket.IO server service and add the environment variable:
+   - `FRONTEND_URL`: URL of your frontend app (e.g., https://thought-matching-game-frontend.onrender.com)
+6. Redeploy your Socket.IO server for the changes to take effect
 
 ## Using Render Blueprint (render.yaml)
 
@@ -64,6 +67,8 @@ For easier deployment, you can use the included `render.yaml` file:
 3. Click "New" and select "Blueprint"
 4. Connect your forked repository
 5. Render will automatically create both services
+
+**Important**: After deployment, you need to manually update the `NEXT_PUBLIC_SOCKET_URL` environment variable in the frontend service with the actual URL of your Socket.IO server, and add the `FRONTEND_URL` environment variable to your Socket.IO server with the URL of your frontend.
 
 ## Local Development
 

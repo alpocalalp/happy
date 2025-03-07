@@ -3,18 +3,28 @@ services:
   - type: web
     name: thought-matching-game-socket
     env: node
+    plan: free
+    runtime: node
     buildCommand: npm install
     startCommand: node server.js
     envVars:
       - key: PORT
         value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://thought-matching-game-frontend.onrender.com
 
   # Next.js Frontend
   - type: web
     name: thought-matching-game-frontend
     env: node
+    plan: free
+    runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NEXT_PUBLIC_SOCKET_URL
-        value: https://thought-matching-game-socket.onrender.com 
+        value: https://thought-matching-game-socket.onrender.com
+      - key: NODE_ENV
+        value: production 
