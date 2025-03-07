@@ -176,61 +176,85 @@ export default function ThoughtMatchingGame() {
 
   // Socket bağlantısı ve event dinleyicileri
   useEffect(() => {
-    const socket = initializeSocket()
+    let socket = initializeSocket()
 
-    socket.on("connect", () => {
-      console.log("Connected to socket server")
-      setError("")
-    })
+    const setupSocketListeners = (socket: any) => {
+      socket.on("connect", () => {
+        console.log("Connected to socket server")
+        setError("")
+        // Eğer oyuncu adı varsa, otomatik olarak oyuna katıl
+        if (playerName && gameState === "name") {
+          socket.emit("join_game", { playerName })
+        }
+      })
 
-    socket.on("connect_error", (err: Error) => {
-      console.error("Socket connection error:", err)
-      setError("Sunucuya bağlanılamadı. Lütfen tekrar deneyin.")
-    })
+      socket.on("connect_error", (err: Error) => {
+        console.error("Socket connection error:", err)
+        setError("Sunucuya bağlanılamadı. Yeniden bağlanılıyor...")
+      })
 
-    socket.on("disconnect", () => {
-      console.log("Disconnected from socket server")
-      setError("Sunucu bağlantısı kesildi. Yeniden bağlanılıyor...")
-    })
+      socket.on("disconnect", () => {
+        console.log("Disconnected from socket server")
+        setError("Sunucu bağlantısı kesildi. Yeniden bağlanılıyor...")
+      })
 
-    socket.on("players_updated", (updatedPlayers: Player[]) => {
-      console.log("Players updated:", updatedPlayers)
-      const uniquePlayers = updatedPlayers.filter((player, index, self) =>
-        index === self.findIndex((p) => p.id === player.id)
-      )
-      setPlayers(uniquePlayers)
-      setIsMultiplayer(uniquePlayers.length > 1)
-    })
+      socket.on("players_updated", (updatedPlayers: Player[]) => {
+        console.log("Players updated:", updatedPlayers)
+        const uniquePlayers = updatedPlayers.filter((player, index, self) =>
+          index === self.findIndex((p) => p.id === player.id)
+        )
+        setPlayers(uniquePlayers)
+        setIsMultiplayer(uniquePlayers.length > 1)
+      })
 
-    socket.on("game_start", () => {
-      console.log("Game starting...")
-      setGameState("playing")
-      setStartTime(Date.now())
-      setWaitingTimer(0) // Reset waiting timer when game starts
-    })
+      socket.on("waiting_timer", (timeLeft: number) => {
+        console.log("Waiting timer update:", timeLeft)
+        setWaitingTimer(timeLeft)
+      })
 
-    socket.on("waiting_timer", (timeLeft: number) => {
-      console.log("Waiting timer update:", timeLeft)
-      setWaitingTimer(timeLeft)
-    })
+      socket.on("game_timer", (timeLeft: number) => {
+        console.log("Game timer update:", timeLeft)
+        setGameTimer(timeLeft)
+        if (timeLeft <= 0) {
+          handleGameEnd()
+        }
+      })
 
-    socket.on("game_timer", (timeLeft: number) => {
-      console.log("Game timer update:", timeLeft)
-      setGameTimer(timeLeft)
-      if (timeLeft <= 0) {
-        handleGameEnd()
+      socket.on("game_start", () => {
+        console.log("Game starting...")
+        setGameState("playing")
+        setStartTime(Date.now())
+        setWaitingTimer(0)
+      })
+
+      socket.on("game_finished", (finalLeaderboard: Player[]) => {
+        console.log("Game finished, leaderboard:", finalLeaderboard)
+        setLeaderboard(finalLeaderboard)
+        setGameState("leaderboard")
+      })
+
+      socket.on("error", (message: string) => {
+        console.error("Server error:", message)
+        setError(message)
+      })
+    }
+
+    setupSocketListeners(socket)
+
+    // Bağlantı koptuğunda yeniden bağlanma denemesi
+    const reconnectInterval = setInterval(() => {
+      if (!socket.connected) {
+        console.log("Attempting to reconnect...")
+        socket = initializeSocket()
+        setupSocketListeners(socket)
       }
-    })
-
-    socket.on("error", (message: string) => {
-      console.error("Server error:", message)
-      setError(message)
-    })
+    }, 5000)
 
     return () => {
+      clearInterval(reconnectInterval)
       socket.disconnect()
     }
-  }, [])
+  }, [playerName]) // playerName değiştiğinde socket bağlantısını yenile
 
   // Oyun bitişi işleyicisi
   const handleGameEnd = () => {
@@ -266,7 +290,7 @@ export default function ThoughtMatchingGame() {
     try {
       const socket = getSocket()
       
-      // Socket bağlantısını kontrol et, bağlı değilse yeniden bağlan
+      // Socket bağlantısını kontrol et
       if (!socket || !socket.connected) {
         console.log("Socket not connected, initializing new connection...")
         const newSocket = initializeSocket()
@@ -276,20 +300,14 @@ export default function ThoughtMatchingGame() {
           newSocket.emit("join_game", { playerName: playerName.trim() })
           setGameState("waiting")
           setError("")
-          setWaitingTimer(WAITING_TIME) // Set initial waiting time
-        })
-
-        newSocket.on("connect_error", (err: Error) => {
-          console.error("New socket connection error:", err)
-          setError("Sunucuya bağlanılamadı. Lütfen tekrar deneyin.")
+          setWaitingTimer(WAITING_TIME)
         })
       } else {
-        // Socket zaten bağlıysa direkt oyuna katıl
         console.log("Using existing socket connection")
         socket.emit("join_game", { playerName: playerName.trim() })
         setGameState("waiting")
         setError("")
-        setWaitingTimer(WAITING_TIME) // Set initial waiting time
+        setWaitingTimer(WAITING_TIME)
       }
     } catch (err) {
       console.error("Error joining game:", err)

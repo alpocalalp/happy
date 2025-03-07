@@ -94,19 +94,25 @@ const startWaitingTimer = (sessionId) => {
   console.log(`Initial waiting time sent: ${session.timeLeft}ms`)
 
   // Start new timer
+  let timeLeft = WAITING_TIME
   session.waitingTimer = setInterval(() => {
-    session.timeLeft -= 1000
+    try {
+      timeLeft -= 1000
 
-    // Notify clients about remaining time
-    io.to(sessionId).emit("waiting_timer", session.timeLeft)
-    console.log(`Waiting timer update for session ${sessionId}: ${session.timeLeft}ms remaining`)
+      // Notify clients about remaining time
+      io.to(sessionId).emit("waiting_timer", timeLeft)
+      console.log(`Waiting timer update for session ${sessionId}: ${timeLeft}ms remaining`)
 
-    // When timer ends
-    if (session.timeLeft <= 0) {
-      console.log(`Waiting timer ended for session ${sessionId}, starting game`)
-      clearInterval(session.waitingTimer)
-      session.waitingTimer = null
-      startGame(sessionId)
+      // When timer ends
+      if (timeLeft <= 0) {
+        console.log(`Waiting timer ended for session ${sessionId}, starting game`)
+        clearInterval(session.waitingTimer)
+        session.waitingTimer = null
+        startGame(sessionId)
+      }
+    } catch (error) {
+      console.error(`Error in waiting timer for session ${sessionId}:`, error)
+      clearSessionTimers(session)
     }
   }, 1000)
 }
@@ -118,35 +124,50 @@ const startGame = (sessionId) => {
 
   console.log(`Starting game for session ${sessionId}`)
 
-  // Clear any existing timers
-  clearSessionTimers(session)
+  try {
+    // Clear any existing timers
+    clearSessionTimers(session)
 
-  // Update session state
-  session.status = GameState.PLAYING
-  session.startTime = Date.now()
-  session.timeLeft = MAX_GAME_TIME
-  
-  // Immediately send initial time and game start signal
-  io.to(sessionId).emit("game_timer", session.timeLeft)
-  io.to(sessionId).emit("game_start")
-  console.log(`Initial game time sent: ${session.timeLeft}ms`)
+    // Update session state
+    session.status = GameState.PLAYING
+    session.startTime = Date.now()
 
-  // Start game timer
-  session.gameTimer = setInterval(() => {
-    session.timeLeft -= 1000
+    // First send game start signal
+    io.to(sessionId).emit("game_start")
+    console.log(`Game start signal sent for session ${sessionId}`)
 
-    // Notify clients about remaining time
-    io.to(sessionId).emit("game_timer", session.timeLeft)
-    console.log(`Game timer update for session ${sessionId}: ${session.timeLeft}ms remaining`)
+    // Initialize game timer
+    let timeLeft = MAX_GAME_TIME
+    
+    // Send initial game time
+    io.to(sessionId).emit("game_timer", timeLeft)
+    console.log(`Initial game time sent: ${timeLeft}ms`)
 
-    // When game time ends
-    if (session.timeLeft <= 0) {
-      console.log(`Game timer ended for session ${sessionId}`)
-      clearInterval(session.gameTimer)
-      session.gameTimer = null
-      endGame(sessionId)
-    }
-  }, 1000)
+    // Start game timer
+    session.gameTimer = setInterval(() => {
+      try {
+        timeLeft -= 1000
+
+        // Notify clients about remaining time
+        io.to(sessionId).emit("game_timer", timeLeft)
+        console.log(`Game timer update for session ${sessionId}: ${timeLeft}ms remaining`)
+
+        // When game time ends
+        if (timeLeft <= 0) {
+          console.log(`Game timer ended for session ${sessionId}`)
+          clearInterval(session.gameTimer)
+          session.gameTimer = null
+          endGame(sessionId)
+        }
+      } catch (error) {
+        console.error(`Error in game timer for session ${sessionId}:`, error)
+        clearSessionTimers(session)
+      }
+    }, 1000)
+  } catch (error) {
+    console.error(`Error starting game for session ${sessionId}:`, error)
+    clearSessionTimers(session)
+  }
 }
 
 // End game for a session
@@ -181,8 +202,18 @@ io.on("connection", (socket) => {
   // Handle player joining
   socket.on("join_game", ({ playerName }) => {
     try {
+      let session;
+
       // Find or create available session
-      const session = findOrCreateSession()
+      const existingSession = findOrCreateSession()
+
+      // Check if game is already in progress
+      if (existingSession.status !== GameState.WAITING) {
+        session = createGameSession()
+        socket.emit("info", "Yeni bir oyun odasına yönlendiriliyorsunuz.")
+      } else {
+        session = existingSession
+      }
 
       // Check player limit
       if (session.players.length >= MAX_PLAYERS) {
@@ -190,11 +221,14 @@ io.on("connection", (socket) => {
         return
       }
 
-      // Check if game is already in progress
-      if (session.status !== GameState.WAITING) {
-        const newSession = createGameSession()
-        socket.emit("info", "Yeni bir oyun odasına yönlendiriliyorsunuz.")
-        session = newSession
+      // Leave previous session if exists
+      if (socket.sessionId) {
+        const oldSession = gameSessions.get(socket.sessionId)
+        if (oldSession) {
+          oldSession.players = oldSession.players.filter(p => p.id !== socket.id)
+          socket.leave(oldSession.id)
+          io.to(oldSession.id).emit("players_updated", oldSession.players)
+        }
       }
 
       // Add player to session
@@ -218,6 +252,9 @@ io.on("connection", (socket) => {
       // Start or restart waiting timer
       if (session.status === GameState.WAITING) {
         console.log(`Starting/Restarting waiting timer for session ${session.id}`)
+        // Clear any existing timer first
+        clearSessionTimers(session)
+        // Start new timer
         startWaitingTimer(session.id)
       }
 
