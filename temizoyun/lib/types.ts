@@ -16,9 +16,3 @@ export interface GameSession {
   endTime?: number
 }
 
-export interface Question {
-  statement: string
-  correctAnswer: string
-  options: string[]
-}
-

@@ -15,7 +15,7 @@ export const initializeSocket = () => {
     
     socket = io(socketUrl, {
       // Hem websocket hem polling destekle (Render için önemli)
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],
       // Bağlantı sorunlarında yeniden bağlanma ayarları
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

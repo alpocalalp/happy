@@ -1,248 +1,463 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import { io } from 'socket.io-client'
+import { useState, useEffect } from "react"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
+import { Check, AlertCircle, Trophy, Users, Clock } from "lucide-react"
+import { initializeSocket, getSocket } from "@/lib/socket"
+import type { Player } from "@/lib/types"
 
-const GAME_DURATION = 60 // 60 seconds game duration
-const THOUGHTS = [
-  "Mutluluk", "Heyecan", "Hüzün", "Özlem", "Sevgi",
-  "Umut", "Korku", "Merak", "Şaşkınlık", "Huzur"
+const questions = [
+  {
+    statement: "Bu benim için gerçekten önemli, ama bunu yapabilmek için bir plan yapmalıyım.",
+    correctAnswer: "Sağlıklı Yetişkin Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Herkes hata yapabilir, önemli olan nasıl telafi edeceğim.",
+    correctAnswer: "Sağlıklı Yetişkin Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Ya ebeveynliğim başarısız olduysa? Ya çocuklarım beni sevmiyorsa?",
+    correctAnswer: "Kaygılı Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Her şey kötüye gidecek, kontrolü kaybedeceğim!",
+    correctAnswer: "Kaygılı Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Ne çocuklarım ne torunlarım beni aramıyor! Nankörlük yapıyorlar!",
+    correctAnswer: "Kızgın Korungan Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Beni kimse incitemez, herkese sert olmalıyım!",
+    correctAnswer: "Kızgın Korungan Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Bakıma muhtaç hale gelmemeliyim, her şey mükemmel olmalı!",
+    correctAnswer: "Talepkâr Mod",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Hedefime ulaşana kadar durmamalıyım, dinlenmek zayıflıktır!",
+    correctAnswer: "Talepkâr Mod",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Yorgun olsam dahi, çocuklarıma zaman ayırmalıyım.",
+    correctAnswer: "Uyumlu Teslimci Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
+  {
+    statement: "Önemli değil, benim hislerim ya da ihtiyaçlarım hiç önemli değil, yeter ki sorun çıkmasın, ailem mutlu olsun",
+    correctAnswer: "Uyumlu Teslimci Çocuk Modu",
+    options: [
+      "Uyumlu Teslimci Çocuk Modu",
+      "Talepkâr Mod",
+      "Kızgın Korungan Çocuk Modu",
+      "Kaygılı Çocuk Modu",
+      "Sağlıklı Yetişkin Modu",
+    ],
+  },
 ]
 
-export default function Home() {
-  const [socket, setSocket] = useState(null)
+export default function ThoughtMatchingGame() {
+  const [gameState, setGameState] = useState("name")
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [selectedAnswer, setSelectedAnswer] = useState(null)
+  const [isCorrect, setIsCorrect] = useState(null)
+  const [score, setScore] = useState(0)
+  const [incorrectCount, setIncorrectCount] = useState(0)
   const [playerName, setPlayerName] = useState("")
   const [players, setPlayers] = useState([])
   const [isReady, setIsReady] = useState(false)
-  const [gameStarted, setGameStarted] = useState(false)
-  const [gameFinished, setGameFinished] = useState(false)
-  const [results, setResults] = useState([])
+  const [startTime, setStartTime] = useState(null)
+  const [endTime, setEndTime] = useState(null)
+  const [leaderboard, setLeaderboard] = useState([])
   const [error, setError] = useState("")
-  
-  // Game state
-  const [currentThought, setCurrentThought] = useState("")
-  const [selectedThoughts, setSelectedThoughts] = useState([])
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
-  const [score, setScore] = useState(0)
-  const [incorrectCount, setIncorrectCount] = useState(0)
 
+  // Initialize socket connection
   useEffect(() => {
-    // Connect to the socket server
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001", {
-      transports: ["websocket"]
-    })
+    const socket = initializeSocket()
 
-    socketInstance.on("connect", () => {
+    socket.on("connect", () => {
       console.log("Connected to socket server")
       setError("")
     })
 
-    socketInstance.on("connect_error", (err) => {
+    socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err)
       setError("Failed to connect to game server")
     })
 
-    socketInstance.on("players_updated", (updatedPlayers) => {
+    socket.on("players_updated", (updatedPlayers) => {
       setPlayers(updatedPlayers)
     })
 
-    socketInstance.on("game_start", () => {
-      setGameStarted(true)
-      startGame()
+    socket.on("game_start", () => {
+      setGameState("playing")
+      setStartTime(Date.now())
     })
 
-    socketInstance.on("game_finished", (gameResults) => {
-      setGameFinished(true)
-      setResults(gameResults)
+    socket.on("game_finished", (finalLeaderboard) => {
+      setLeaderboard(finalLeaderboard)
+      setGameState("leaderboard")
     })
-
-    socketInstance.on("thought_match", ({ thought, matches }) => {
-      if (matches) {
-        setScore(prev => prev + 10)
-        // Show success feedback
-      } else {
-        setIncorrectCount(prev => prev + 1)
-        // Show error feedback
-      }
-    })
-
-    setSocket(socketInstance)
 
     return () => {
-      socketInstance.disconnect()
+      socket.disconnect()
     }
   }, [])
-
-  // Game timer
-  useEffect(() => {
-    let timer
-    if (gameStarted && !gameFinished && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            handleGameComplete()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => clearInterval(timer)
-  }, [gameStarted, gameFinished, timeLeft])
-
-  const startGame = () => {
-    setTimeLeft(GAME_DURATION)
-    setScore(0)
-    setIncorrectCount(0)
-    setSelectedThoughts([])
-    setCurrentThought(THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)])
-  }
 
   const handleJoinGame = () => {
     if (!playerName.trim()) {
       setError("Please enter your name")
       return
     }
-    socket?.emit("join_game", { playerName })
+
+    const socket = getSocket()
+    socket.emit("join_game", { playerName: playerName.trim() })
+    setGameState("waiting")
   }
 
-  const handleReadyClick = () => {
-    setIsReady(!isReady)
-    socket?.emit("player_ready", !isReady)
+  const handleToggleReady = () => {
+    const newReadyState = !isReady
+    setIsReady(newReadyState)
+
+    const socket = getSocket()
+    socket.emit("player_ready", newReadyState)
   }
 
-  const handleThoughtSelect = (thought) => {
-    if (selectedThoughts.includes(thought)) return
+  const handleSelectAnswer = (answer) => {
+    setSelectedAnswer(answer)
+    const correct = answer === questions[currentQuestionIndex].correctAnswer
+    setIsCorrect(correct)
 
-    setSelectedThoughts(prev => [...prev, thought])
-    socket?.emit("submit_thought", { thought })
-    
-    // Get next thought
-    const remainingThoughts = THOUGHTS.filter(t => !selectedThoughts.includes(t))
-    if (remainingThoughts.length > 0) {
-      setCurrentThought(remainingThoughts[Math.floor(Math.random() * remainingThoughts.length)])
+    if (correct) {
+      setScore(score + 1)
+    } else {
+      setIncorrectCount(incorrectCount + 1)
     }
   }
 
-  const handleGameComplete = () => {
-    socket?.emit("game_completed", {
-      score,
-      incorrectCount,
-      timeElapsed: GAME_DURATION - timeLeft
-    })
-    setGameFinished(true)
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1)
+      setSelectedAnswer(null)
+      setIsCorrect(null)
+    } else {
+      setEndTime(Date.now())
+      setGameState("success")
+
+      // Emit game completion to server
+      const socket = getSocket()
+      const timeElapsed = startTime ? Date.now() - startTime : 0
+      socket.emit("game_completed", {
+        score,
+        incorrectCount,
+        timeElapsed,
+      })
+    }
   }
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+  const handleRestart = () => {
+    setGameState("waiting")
+    setCurrentQuestionIndex(0)
+    setSelectedAnswer(null)
+    setIsCorrect(null)
+    setScore(0)
+    setIncorrectCount(0)
+    setIsReady(false)
+    setStartTime(null)
+    setEndTime(null)
+  }
+
+  const getColorForMode = (mode) => {
+    switch (mode) {
+      case "Sağlıklı Yetişkin Modu":
+        return "bg-green-100 border-green-300 hover:bg-green-200"
+      case "Kaygılı Çocuk Modu":
+        return "bg-blue-100 border-blue-300 hover:bg-blue-200"
+      case "Kızgın Korungan Çocuk Modu":
+        return "bg-red-100 border-red-300 hover:bg-red-200"
+      case "Talepkâr Mod":
+        return "bg-purple-100 border-purple-300 hover:bg-purple-200"
+      case "Uyumlu Teslimci Çocuk Modu":
+        return "bg-yellow-100 border-yellow-300 hover:bg-yellow-200"
+      default:
+        return "bg-gray-100 border-gray-300 hover:bg-gray-200"
+    }
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-50 to-gray-100">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center">Thought Matching Game</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="mb-4 p-2 bg-red-100 text-red-600 rounded">
-              {error}
-            </div>
-          )}
-
-          {!players.find(p => p.id === socket?.id) ? (
-            <div className="space-y-4">
-              <p className="text-center text-gray-600">Enter your name to join the game</p>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Your name"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                />
-                <Button onClick={handleJoinGame}>
-                  Join
-                </Button>
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 p-4 flex flex-col items-center justify-center">
+      {gameState === "name" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <Card className="p-6">
+            <h1 className="text-2xl font-bold text-center mb-6">Düşünce Eşleştirme Oyunu</h1>
+            {error && (
+              <div className="mb-4 p-2 bg-red-100 text-red-600 rounded">
+                {error}
               </div>
-            </div>
-          ) : !gameStarted ? (
+            )}
             <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="font-semibold">Players:</h3>
-                <div className="space-y-1">
-                  {players.map((player) => (
-                    <div
-                      key={player.id}
-                      className="flex items-center justify-between p-2 bg-white rounded border"
-                    >
-                      <span>{player.name}</span>
-                      {player.isReady ? (
-                        <span className="text-green-500">Ready</span>
-                      ) : (
-                        <span className="text-gray-400">Not Ready</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleReadyClick}
-                variant={isReady ? "secondary" : "default"}
-              >
-                {isReady ? "Not Ready" : "Ready"}
+              <Input
+                type="text"
+                placeholder="Adınızı girin"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+              />
+              <Button className="w-full" onClick={handleJoinGame}>
+                Oyuna Katıl
               </Button>
             </div>
-          ) : !gameFinished ? (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-4">
-                <div className="text-sm font-medium">Score: {score}</div>
-                <div className="text-sm font-medium">Time: {formatTime(timeLeft)}</div>
-              </div>
-              
-              <div className="p-4 bg-white rounded-lg border text-center mb-4">
-                <h3 className="text-lg font-semibold mb-2">Current Thought</h3>
-                <p className="text-2xl font-bold text-blue-600">{currentThought}</p>
-              </div>
+          </Card>
+        </motion.div>
+      )}
 
-              <div className="grid grid-cols-2 gap-2">
-                {THOUGHTS.map((thought) => (
-                  <Button
-                    key={thought}
-                    onClick={() => handleThoughtSelect(thought)}
-                    disabled={selectedThoughts.includes(thought)}
-                    variant={selectedThoughts.includes(thought) ? "secondary" : "default"}
-                    className="w-full"
-                  >
-                    {thought}
-                  </Button>
-                ))}
+      {gameState === "waiting" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Oyuncular</h2>
+            <div className="space-y-2 mb-4">
+              {players.map((player) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between p-2 bg-white rounded border"
+                >
+                  <span>{player.name}</span>
+                  {player.isReady ? (
+                    <span className="text-green-500 flex items-center">
+                      <Check className="w-4 h-4 mr-1" />
+                      Hazır
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">Bekleniyor</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleToggleReady}
+              variant={isReady ? "secondary" : "default"}
+            >
+              {isReady ? "Hazır Değil" : "Hazır"}
+            </Button>
+          </Card>
+        </motion.div>
+      )}
+
+      {gameState === "playing" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-2xl"
+        >
+          <Card className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center space-x-2">
+                <Trophy className="w-5 h-5 text-yellow-500" />
+                <span className="font-medium">Skor: {score}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                <span className="font-medium">Oyuncular: {players.length}</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-purple-500" />
+                <span className="font-medium">
+                  Süre: {startTime ? Math.floor((Date.now() - startTime) / 1000) : 0}s
+                </span>
               </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-center">Game Results</h3>
-              <div className="space-y-2">
-                {results.map((player, index) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between p-2 bg-white rounded border"
-                  >
+
+            <div className="mb-6">
+              <h3 className="text-lg font-medium mb-2">Soru {currentQuestionIndex + 1}/{questions.length}</h3>
+              <p className="text-gray-700 text-lg">{questions[currentQuestionIndex].statement}</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 mb-6">
+              {questions[currentQuestionIndex].options.map((option) => (
+                <Button
+                  key={option}
+                  onClick={() => handleSelectAnswer(option)}
+                  disabled={selectedAnswer !== null}
+                  className={`w-full justify-start px-4 py-3 text-left ${
+                    selectedAnswer === option
+                      ? option === questions[currentQuestionIndex].correctAnswer
+                        ? "bg-green-100 border-green-300 hover:bg-green-200"
+                        : "bg-red-100 border-red-300 hover:bg-red-200"
+                      : getColorForMode(option)
+                  }`}
+                >
+                  {option}
+                </Button>
+              ))}
+            </div>
+
+            {selectedAnswer && (
+              <div
+                className={`p-4 rounded-lg mb-4 flex items-center ${
+                  isCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {isCorrect ? (
+                  <>
+                    <Check className="w-5 h-5 mr-2" />
+                    <span>Doğru cevap!</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-5 h-5 mr-2" />
+                    <span>
+                      Yanlış cevap. Doğru cevap: {questions[currentQuestionIndex].correctAnswer}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {selectedAnswer && (
+              <Button className="w-full" onClick={handleNextQuestion}>
+                {currentQuestionIndex < questions.length - 1 ? "Sonraki Soru" : "Oyunu Bitir"}
+              </Button>
+            )}
+          </Card>
+        </motion.div>
+      )}
+
+      {gameState === "success" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <Card className="p-6">
+            <h2 className="text-2xl font-bold text-center mb-6">Tebrikler!</h2>
+            <div className="space-y-4 mb-6">
+              <div className="flex justify-between items-center">
+                <span>Toplam Skor:</span>
+                <span className="font-bold">{score}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Yanlış Sayısı:</span>
+                <span className="font-bold">{incorrectCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Geçen Süre:</span>
+                <span className="font-bold">
+                  {startTime && endTime ? Math.floor((endTime - startTime) / 1000) : 0}s
+                </span>
+              </div>
+            </div>
+            <Button className="w-full" onClick={handleRestart}>
+              Yeniden Oyna
+            </Button>
+          </Card>
+        </motion.div>
+      )}
+
+      {gameState === "leaderboard" && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <Card className="p-6">
+            <h2 className="text-2xl font-bold text-center mb-6">Skor Tablosu</h2>
+            <div className="space-y-2 mb-6">
+              {leaderboard.map((player, index) => (
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between p-3 bg-white rounded border"
+                >
+                  <div className="flex items-center">
+                    <span className="font-medium mr-2">#{index + 1}</span>
                     <span>{player.name}</span>
-                    <span>Score: {player.score}</span>
                   </div>
-                ))}
-              </div>
+                  <div className="flex items-center space-x-4">
+                    <span>Skor: {player.score}</span>
+                    <span>Süre: {Math.floor(player.timeElapsed / 1000)}s</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </main>
+            <Button className="w-full" onClick={handleRestart}>
+              Yeniden Oyna
+            </Button>
+          </Card>
+        </motion.div>
+      )}
+    </div>
   )
 } 
