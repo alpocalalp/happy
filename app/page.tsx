@@ -7,9 +7,15 @@ import { Input } from "@/components/ui/input"
 import { motion } from "framer-motion"
 import { Check, AlertCircle, Trophy, Users, Clock } from "lucide-react"
 import { initializeSocket, getSocket } from "@/lib/socket"
-import type { Player } from "@/lib/types"
+import { Player } from "@/lib/types"
 
-const questions = [
+interface Question {
+  statement: string
+  correctAnswer: string
+  options: string[]
+}
+
+const questions: Question[] = [
   {
     statement: "Bu benim için gerçekten önemli, ama bunu yapabilmek için bir plan yapmalıyım.",
     correctAnswer: "Sağlıklı Yetişkin Modu",
@@ -123,19 +129,19 @@ const questions = [
 ]
 
 export default function ThoughtMatchingGame() {
-  const [gameState, setGameState] = useState("name")
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState(null)
-  const [isCorrect, setIsCorrect] = useState(null)
-  const [score, setScore] = useState(0)
-  const [incorrectCount, setIncorrectCount] = useState(0)
-  const [playerName, setPlayerName] = useState("")
-  const [players, setPlayers] = useState([])
-  const [isReady, setIsReady] = useState(false)
-  const [startTime, setStartTime] = useState(null)
-  const [endTime, setEndTime] = useState(null)
-  const [leaderboard, setLeaderboard] = useState([])
-  const [error, setError] = useState("")
+  const [gameState, setGameState] = useState<"name" | "waiting" | "playing" | "success" | "leaderboard">("name")
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
+  const [score, setScore] = useState<number>(0)
+  const [incorrectCount, setIncorrectCount] = useState<number>(0)
+  const [playerName, setPlayerName] = useState<string>("")
+  const [players, setPlayers] = useState<Player[]>([])
+  const [isReady, setIsReady] = useState<boolean>(false)
+  const [startTime, setStartTime] = useState<number | null>(null)
+  const [endTime, setEndTime] = useState<number | null>(null)
+  const [leaderboard, setLeaderboard] = useState<Player[]>([])
+  const [error, setError] = useState<string>("")
 
   // Initialize socket connection
   useEffect(() => {
@@ -189,7 +195,7 @@ export default function ThoughtMatchingGame() {
     socket.emit("player_ready", newReadyState)
   }
 
-  const handleSelectAnswer = (answer) => {
+  const handleSelectAnswer = (answer: string) => {
     setSelectedAnswer(answer)
     const correct = answer === questions[currentQuestionIndex].correctAnswer
     setIsCorrect(correct)
@@ -233,7 +239,7 @@ export default function ThoughtMatchingGame() {
     setEndTime(null)
   }
 
-  const getColorForMode = (mode) => {
+  const getColorForMode = (mode: string) => {
     switch (mode) {
       case "Sağlıklı Yetişkin Modu":
         return "bg-green-100 border-green-300 hover:bg-green-200"
