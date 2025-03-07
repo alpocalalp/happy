@@ -53,26 +53,34 @@ const startWaitingTimer = (sessionId) => {
   const session = gameSessions.get(sessionId)
   if (!session) return
 
-  let timeLeft = WAITING_TIME
-
   // Clear existing timer if any
   if (session.waitingTimer) {
     clearInterval(session.waitingTimer)
   }
 
+  // Initialize the timer
+  session.timeLeft = WAITING_TIME
+  
+  // Immediately send initial time
+  io.to(sessionId).emit("waiting_timer", session.timeLeft)
+
   // Start new timer
   session.waitingTimer = setInterval(() => {
-    timeLeft -= 1000
+    session.timeLeft -= 1000
 
     // Notify clients about remaining time
-    io.to(sessionId).emit("waiting_timer", timeLeft)
+    io.to(sessionId).emit("waiting_timer", session.timeLeft)
+    console.log(`Waiting timer update for session ${sessionId}: ${session.timeLeft}ms remaining`)
 
     // When timer ends
-    if (timeLeft <= 0) {
+    if (session.timeLeft <= 0) {
       clearInterval(session.waitingTimer)
+      session.waitingTimer = null
       startGame(sessionId)
     }
   }, 1000)
+
+  console.log(`Started waiting timer for session ${sessionId}`)
 }
 
 // Start game for a session
@@ -80,30 +88,44 @@ const startGame = (sessionId) => {
   const session = gameSessions.get(sessionId)
   if (!session) return
 
+  // Clear waiting timer if it exists
+  if (session.waitingTimer) {
+    clearInterval(session.waitingTimer)
+    session.waitingTimer = null
+  }
+
   session.status = "playing"
   session.startTime = Date.now()
   
-  // Start game timer
-  let timeLeft = MAX_GAME_TIME
+  // Initialize game timer
+  session.timeLeft = MAX_GAME_TIME
+  
+  // Immediately send initial time
+  io.to(sessionId).emit("game_timer", session.timeLeft)
 
+  // Clear existing game timer if any
   if (session.gameTimer) {
     clearInterval(session.gameTimer)
   }
 
+  // Start new game timer
   session.gameTimer = setInterval(() => {
-    timeLeft -= 1000
+    session.timeLeft -= 1000
 
     // Notify clients about remaining time
-    io.to(sessionId).emit("game_timer", timeLeft)
+    io.to(sessionId).emit("game_timer", session.timeLeft)
+    console.log(`Game timer update for session ${sessionId}: ${session.timeLeft}ms remaining`)
 
     // When game time ends
-    if (timeLeft <= 0) {
+    if (session.timeLeft <= 0) {
       clearInterval(session.gameTimer)
+      session.gameTimer = null
       endGame(sessionId)
     }
   }, 1000)
 
   io.to(sessionId).emit("game_start")
+  console.log(`Started game for session ${sessionId}`)
 }
 
 // End game for a session
